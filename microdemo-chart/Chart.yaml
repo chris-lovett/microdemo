@@ -1,0 +1,6 @@
+apiVersion: v2
+name: microdemo
+description: 3-service Go microservices demo pre-wired for Consul Connect (transparent proxy)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

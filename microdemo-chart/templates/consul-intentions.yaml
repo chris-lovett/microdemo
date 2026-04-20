@@ -1,0 +1,36 @@
+{{- if and .Values.consul.enabled .Values.consul.intentions.enabled }}
+apiVersion: consul.hashicorp.com/v1alpha1
+kind: ServiceIntentions
+metadata:
+  name: microdemo-intentions
+spec:
+  {{- if .Values.consul.intentions.defaultDeny }}
+  destination:
+    name: "*"
+  sources:
+  - name: "*"
+    action: deny
+  {{- end }}
+---
+apiVersion: consul.hashicorp.com/v1alpha1
+kind: ServiceIntentions
+metadata:
+  name: allow-frontend-to-api
+spec:
+  destination:
+    name: api
+  sources:
+  - name: frontend
+    action: allow
+---
+apiVersion: consul.hashicorp.com/v1alpha1
+kind: ServiceIntentions
+metadata:
+  name: allow-api-to-worker
+spec:
+  destination:
+    name: worker
+  sources:
+  - name: api
+    action: allow
+{{- end }}

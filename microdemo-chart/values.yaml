@@ -1,0 +1,30 @@
+namespace: demo
+
+images:
+  frontend: quay.io/chris_lovett/microdemo/frontend:latest
+  api: quay.io/chris_lovett/microdemo/api:latest
+  worker: quay.io/chris_lovett/microdemo/worker:latest
+
+replicas:
+  frontend: 1
+  api: 1
+  worker: 1
+
+# If true, chart creates the Namespace
+createNamespace: true
+
+# If true, a Helm hook Job labels the namespace:
+# consul.hashicorp.com/connect-inject=true
+labelNamespaceForConsulInject: true
+
+# Consul wiring
+consul:
+  enabled: true
+  intentions:
+    enabled: true
+    # default deny unless allowed by explicit intentions
+    defaultDeny: true
+
+route:
+  enabled: true
+  host: "" # leave empty to auto-generate
