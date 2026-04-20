@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: worker
-  namespace: { { .Values.namespace } }
 spec:
   replicas: { { .Values.replicas.worker } }
   selector:
@@ -32,7 +31,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
-  namespace: { { .Values.namespace } }
 spec:
   replicas: { { .Values.replicas.api } }
   selector:
@@ -65,7 +63,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: { { .Values.namespace } }
 spec:
   replicas: { { .Values.replicas.frontend } }
   selector:

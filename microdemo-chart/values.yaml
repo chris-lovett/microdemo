@@ -11,7 +11,9 @@ replicas:
   worker: 1
 
 # If true, chart creates the Namespace
-createNamespace: true
+createNamespace: false
+labelNamespaceForConsulInject: false
+namespace: demo
 
 # If true, a Helm hook Job labels the namespace:
 # consul.hashicorp.com/connect-inject=true
