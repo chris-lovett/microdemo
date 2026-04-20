@@ -1,6 +1,6 @@
 # microdemo
 
-A tiny 3-service Go microservices demo intended for Kubernetes deployments (Helm), optionally pre-wired for **Consul Connect** (transparent proxy) and **Consul intentions**.
+A tiny 3-service Go microservices demo intended for OpenShift/Kubernetes deployments (Helm), optionally pre-wired for **Consul Connect** (transparent proxy) and **Consul intentions**.
 
 Services and call chain:
 
@@ -23,49 +23,17 @@ Each service exposes:
 - `microdemo-chart/` – Helm chart for deploying all three services
 - `deploy/k8s.yaml` – (currently empty placeholder)
 
-## Prerequisites
+## Prerequisites (OpenShift)
 
-Local build/run:
-
-- Go **1.22+**
-- Docker (optional)
-
-Kubernetes deploy:
-
-- Kubernetes cluster
-- `kubectl`
+- An OpenShift cluster
+- `oc`
 - `helm`
-- (Optional) Consul on Kubernetes (if you want Connect + intentions)
-- (Optional) OpenShift (if you want to use the included `Route` template)
-
-## Local development (no Kubernetes)
-
-You can run the services directly with Go in three terminals.
-
-### Terminal 1: worker
-
-```bash
-go run ./cmd/worker
-```
-
-### Terminal 2: api
-
-```bash
-WORKER_URL="http://localhost:8082/" go run ./cmd/api
-```
-
-…but note: by default the worker listens on `:8080` too. If you want to run all three locally at once without port conflicts, either:
-- run each on a different port (requires a small code change), or
-- run in containers, or
-- run on Kubernetes (recommended for this demo)
-
-Because the current code hard-codes `addr := ":8080"` in all three services, the simplest “multi-service” local run is via Kubernetes or by running each in a container with different published ports.
+- Container images accessible to the cluster (Quay/external registry)
+- (Optional) Consul on Kubernetes/OpenShift (if you want Connect + intentions)
 
 ## Building container images
 
 The `Dockerfile` builds a single binary selected by build arg `CMD` (defaults to `cmd/frontend`).
-
-Examples:
 
 ```bash
 # frontend
@@ -80,111 +48,113 @@ docker build -t microdemo-worker:local --build-arg CMD=cmd/worker .
 
 The image listens on container port **8080**.
 
-## Helm deployment (Kubernetes)
+## Push images to Quay (example)
+
+Tag and push each image to your Quay repository (replace `quay.io/YOUR_ORG/microdemo`).
+
+```bash
+# login
+podman login quay.io
+
+# tag
+podman tag microdemo-frontend:local quay.io/YOUR_ORG/microdemo/frontend:latest
+podman tag microdemo-api:local quay.io/YOUR_ORG/microdemo/api:latest
+podman tag microdemo-worker:local quay.io/YOUR_ORG/microdemo/worker:latest
+
+# push
+podman push quay.io/YOUR_ORG/microdemo/frontend:latest
+podman push quay.io/YOUR_ORG/microdemo/api:latest
+podman push quay.io/YOUR_ORG/microdemo/worker:latest
+```
+
+> If your images are private, create an image pull secret in the OpenShift project and link it to the default service account, e.g.:
+>
+> ```bash
+> oc -n demo create secret docker-registry quay-pull \
+>   --docker-server=quay.io \
+>   --docker-username=YOUR_USER \
+>   --docker-password=YOUR_TOKEN_OR_PASSWORD \
+>   --docker-email=you@example.com
+>
+> oc -n demo secrets link default quay-pull --for=pull
+> ```
+
+## Deploy to OpenShift with Helm
 
 The Helm chart lives in `microdemo-chart/`.
 
-### 1) Choose / create a namespace
+### 1) Create a project (namespace)
 
-By default the chart uses the namespace in values:
+The chart’s default values use:
 
 - `namespace: demo`
 
-The chart can optionally create the namespace (`createNamespace: true`), otherwise create it yourself:
+Create it (recommended on OpenShift):
 
 ```bash
-kubectl create namespace demo
+oc new-project demo
 ```
 
-### 2) (Optional) Enable Consul sidecar injection for the namespace
+> Tip: If you use a different project name, set `--namespace <name>` when installing.
 
-The chart includes a `values.yaml` switch:
+### 2) Configure images
 
-- `labelNamespaceForConsulInject: true`
-
-This is intended to ensure the namespace gets labeled for injection:
-
-- `consul.hashicorp.com/connect-inject=true`
-
-Important: in the current chart templates, I only see a Namespace template (created when `createNamespace: true`) and no Hook Job template that actually labels an existing namespace. If your namespace already exists, make sure it is labeled:
-
-```bash
-kubectl label namespace demo consul.hashicorp.com/connect-inject=true --overwrite
-```
-
-If you are not using Consul Connect injection, you can disable Consul resources:
-
-```bash
---set consul.enabled=false
-```
-
-### 3) Configure images
-
-Default images are configured in `microdemo-chart/values.yaml`:
+Set these values (from `microdemo-chart/values.yaml`):
 
 - `images.frontend`
 - `images.api`
 - `images.worker`
 
-Example install using your own tags:
+Example:
 
 ```bash
 helm upgrade --install microdemo ./microdemo-chart \
   --namespace demo \
-  --set images.frontend=quay.io/chris_lovett/microdemo/frontend:latest \
-  --set images.api=quay.io/chris_lovett/microdemo/api:latest \
-  --set images.worker=quay.io/chris_lovett/microdemo/worker:latest
+  --set images.frontend=quay.io/YOUR_ORG/microdemo/frontend:latest \
+  --set images.api=quay.io/YOUR_ORG/microdemo/api:latest \
+  --set images.worker=quay.io/YOUR_ORG/microdemo/worker:latest
 ```
 
-### 4) Install / upgrade
+### 3) Enable an OpenShift Route for the frontend
+
+The chart includes `templates/route.yaml` to create a Route to `frontend`.
+
+Enable it:
 
 ```bash
-helm upgrade --install microdemo ./microdemo-chart --namespace demo
+helm upgrade --install microdemo ./microdemo-chart \
+  --namespace demo \
+  --set route.enabled=true
 ```
 
-### 5) Verify pods and services
-
-```bash
-kubectl -n demo get pods
-kubectl -n demo get svc
-```
-
-You should see Deployments and Services:
-
-- `frontend`, `api`, `worker` (each Service is port 8080)
-
-### 6) Access the frontend
-
-#### Option A: Port-forward (works on any Kubernetes)
-
-```bash
-kubectl -n demo port-forward svc/frontend 8080:8080
-```
-
-Then:
-
-```bash
-curl -s http://localhost:8080/ | jq .
-curl -i http://localhost:8080/ | sed -n '1,20p'   # observe X-Request-Id header returned by api
-```
-
-#### Option B: OpenShift Route (only if you’re on OpenShift)
-
-The chart includes `microdemo-chart/templates/route.yaml` which creates an OpenShift `Route` for `frontend` when enabled:
+If you want to pin the hostname:
 
 ```bash
 helm upgrade --install microdemo ./microdemo-chart \
   --namespace demo \
   --set route.enabled=true \
-  --set route.host=your.host.example.com
+  --set route.host=microdemo.apps.YOUR_CLUSTER_DOMAIN
 ```
 
-If `route.host` is left empty, OpenShift will generate a host.
-
-Check:
+### 4) Verify
 
 ```bash
-oc -n demo get route frontend
+oc -n demo get pods
+oc -n demo get svc
+oc -n demo get route
+```
+
+Get the URL:
+
+```bash
+oc -n demo get route frontend -o jsonpath='{.spec.host}{"\n"}'
+```
+
+Then call it:
+
+```bash
+HOST="$(oc -n demo get route frontend -o jsonpath='{.spec.host}')"
+curl -s "http://$HOST/" | jq .
 ```
 
 ## Consul (optional)
@@ -202,7 +172,21 @@ Key values:
 - `consul.intentions.enabled` (default: true)
 - `consul.intentions.defaultDeny` (default: true)
 
-If you enable default deny, these intentions are required for the app to function.
+### Namespace labeling for Consul injection
+
+If you are using Consul Connect sidecar injection, ensure the project is labeled:
+
+```bash
+oc label namespace demo consul.hashicorp.com/connect-inject=true --overwrite
+```
+
+If you are not using Consul, you can disable Consul resources:
+
+```bash
+helm upgrade --install microdemo ./microdemo-chart \
+  --namespace demo \
+  --set consul.enabled=false
+```
 
 ## Configuration (env vars)
 
@@ -213,41 +197,43 @@ These are set in the Helm Deployments:
 - `api`
   - `WORKER_URL` (default in code: `http://worker:8080/`)
 
-## Troubleshooting
+## Troubleshooting (OpenShift)
 
-### Check health endpoints
+### Check health endpoints from inside the cluster
 
 ```bash
-kubectl -n demo run -it --rm curl --image=curlimages/curl --restart=Never -- \
+oc -n demo run -it --rm curl --image=curlimages/curl --restart=Never -- \
   curl -sS http://frontend:8080/healthz
 ```
 
 Similarly:
 
 ```bash
-curl -sS http://api:8080/healthz
-curl -sS http://worker:8080/healthz
+oc -n demo run -it --rm curl --image=curlimages/curl --restart=Never -- \
+  curl -sS http://api:8080/healthz
 ```
 
-### Look at logs
+```bash
+oc -n demo run -it --rm curl --image=curlimages/curl --restart=Never -- \
+  curl -sS http://worker:8080/healthz
+```
+
+### Logs
 
 ```bash
-kubectl -n demo logs deploy/frontend
-kubectl -n demo logs deploy/api
-kubectl -n demo logs deploy/worker
+oc -n demo logs deploy/frontend
+oc -n demo logs deploy/api
+oc -n demo logs deploy/worker
 ```
 
 ### Debug header propagation / request id
 
 The `api` service propagates `X-Request-Id` to the worker (and generates one if missing), and returns it in the response header.
 
-Try:
-
 ```bash
-curl -i -H "X-Request-Id: test-123" http://localhost:8080/
+HOST="$(oc -n demo get route frontend -o jsonpath='{.spec.host}')"
+curl -i -H "X-Request-Id: test-123" "http://$HOST/"
 ```
-
-Then inspect the JSON returned from `worker` to confirm it received the request id.
 
 ## License
 
