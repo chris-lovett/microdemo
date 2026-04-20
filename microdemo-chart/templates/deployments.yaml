@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: worker
 spec:
-  replicas: { { .Values.replicas.worker } }
+  replicas: {{ .Values.replicas.worker }}
   selector:
     matchLabels:
       app: worker
@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: { { .Values.images.worker | quote } }
+          image: {{ .Values.images.worker | quote }}
           ports:
             - name: http
               containerPort: 8080
@@ -32,7 +32,7 @@ kind: Deployment
 metadata:
   name: api
 spec:
-  replicas: { { .Values.replicas.api } }
+  replicas: {{ .Values.replicas.api }}
   selector:
     matchLabels:
       app: api
@@ -43,7 +43,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: { { .Values.images.api | quote } }
+          image: {{ .Values.images.api | quote }}
           env:
             - name: WORKER_URL
               value: "http://worker:8080/"
@@ -64,7 +64,7 @@ kind: Deployment
 metadata:
   name: frontend
 spec:
-  replicas: { { .Values.replicas.frontend } }
+  replicas: {{ .Values.replicas.frontend }}
   selector:
     matchLabels:
       app: frontend
@@ -75,7 +75,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: { { .Values.images.frontend | quote } }
+          image: {{ .Values.images.frontend | quote }}
           env:
             - name: API_URL
               value: "http://api:8080/"
